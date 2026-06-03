@@ -79,6 +79,14 @@ All values clamped to [-5, 5].
 - **Per step:** -0.01 (small time penalty)
 No distance-based shaping during flight. This is intentional and critical for stability at high simulation speeds. The proximity bonus only applies at touchdown.
 
+### PPO Algorithm
+
+PPO is a policy gradient algorithm using two neural networks. The **Actor** takes the current state and outputs a Gaussian distribution over the 3 continuous actions. Actions are sampled during training for exploration, and the distribution mean is used during evaluation. The **Critic** takes the same state and outputs a value estimate, predicting total expected future reward from that state.
+
+Each iteration collects 512 steps of experience, then computes advantages using Generalized Advantage Estimation (GAE, lambda=0.95), answering: "was this action better or worse than expected?" The policy is then updated using the clipped surrogate objective, where the probability ratio between new and old policy is clamped to [0.95, 1.05] to prevent destructively large updates.
+
+Additional stability mechanisms include an entropy bonus (prevents the policy from collapsing to deterministic actions), gradient clipping (caps update magnitude from outlier batches), learning rate linear decay, and action clamping to [-1, 1].
+
 ## Setup
 
 ### Requirements
