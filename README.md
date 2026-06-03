@@ -1,6 +1,6 @@
 # Rocket Landing with Reinforcement Learning
 
-A rocket landing simulation using Proximal Policy Optimization (PPO) implemented from scratch in Unity 3D. The agent learns to perform a suicide burn descent and soft vertical landing using a two-phase training pipeline: Behavioral Cloning (BC) from a PID controller, followed by PPO fine-tuning.
+A rocket landing simulation using Proximal Policy Optimization (PPO) implemented from scratch in Unity 3D, with realistic fuel consumption and variable mass. The agent learns to perform a suicide burn descent and soft vertical landing using a two-phase training pipeline: Behavioral Cloning (BC) from a PID controller, followed by PPO fine-tuning.
 
 ## Architecture
 
@@ -72,6 +72,10 @@ All values clamped to [-5, 5].
 | 1 | RCS torque X-axis | [-1, 1] | controls pitch |
 | 2 | RCS torque Z-axis | [-1, 1] | controls roll |
 
+### Physics Model
+
+The simulation includes fuel consumption and aerodynamic drag. Fuel depletes based on specific impulse (mass flow rate = thrust / (Isp * g0)), reducing total mass over the descent. The engine cuts out if fuel reaches zero. Aerodynamic drag follows the standard drag equation (F = 0.5 * rho * Cd * A * v^2), opposing the velocity vector. Both effects reset at the start of each episode.
+
 ### Reward Function (terminal only)
  
 - **Successful landing:** 100 + speed_bonus + tilt_bonus + proximity_bonus (max 300)
@@ -119,9 +123,11 @@ Additional stability mechanisms include an entropy bonus (prevents the policy fr
 
 | Field | Value | Notes |
 |-------|-------|-------|
-| maxThrust | 367000 | Falcon 9 TWR 1.7 |
-| rcsForce | 400000 | Scaled for 22t rocket |
-| mass (Rigidbody) | 22000 | Falcon 9 landing mass |
+| maxThrust | 367000 | TWR ~1.56 at launch mass |
+| rcsForce | 400000 | Scaled for 24t rocket |
+| dryMass | 22000 | Falcon 9 dry landing mass (kg) |
+| fuelMass | 2000 | Starting fuel (kg), resets each episode |
+| useAirDrag | true | Toggle aerodynamic drag simulation |
 | spawnHeight | 30 | Start with 30, increase later |
 | spawnAngleRange | 5 | Degrees of random initial tilt |
 
@@ -132,6 +138,7 @@ Additional stability mechanisms include an entropy bonus (prevents the policy fr
 | padHeight | 3.0 | Adjust to rocket's resting y-position |
 | landingSpeedLimit | 3 | m/s, crash if exceeded at pad |
 | landingTiltLimit | 10 | Degrees, crash if exceeded at pad |
+| landingRadius | 5 | Metres, must land within this distance of pad centre |
 | tiltCrashLimit | 45 | Mid-flight crash threshold |
 | timeScale | 1 | Use 1 for PID/Evaluate, 10 for PPO |
 | useGimbal | true | Must be true for RCS to work |
@@ -153,7 +160,8 @@ python PID_collect.py
 Runs a suicide burn PID controller that lands the rocket and records every observation-action pair. Saves to `demos.npz`. Check the terminal for landing rate (should be >90%).
 
 **Key parameters to match between PID_collect.py and Unity Inspector:**
-- `MASS`, `MAX_THRUST` must match Rigidbody mass and maxThrust
+- `MASS` must match dryMass + fuelMass
+- `MAX_THRUST` must match maxThrust
 - `PAD_HEIGHT` must match padHeight
 - `POS_SCALE`, `VEL_SCALE`, `ANG_VEL_SCALE` must match posScale, velScale, angVelScale
 - `SPAWN_HEIGHT` should match spawnHeight
@@ -234,6 +242,7 @@ When a new skill is needed (e.g. lateral correction for position offsets), colle
 | Rocket lands but engine stays on | No engine cutoff on done | PythonBridge sets cachedThrust=0 on done |
 | PID crashes from 100m | TWR 1.7 margins too tight | Increase PID margin to 10, or start from 30m |
 | BC loss won't decrease | PID data has crashes mixed in | Increase PID episodes, check landing rate |
+| Rocket stops thrusting mid-descent | Out of fuel | Increase fuelMass or reduce spawnHeight |
 
 ## File Reference
 
