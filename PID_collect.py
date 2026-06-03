@@ -27,7 +27,7 @@ ANG_VEL_SCALE = 10.0
 
 # rocket physics (must match Unity Inspector!)
 THRUST_TO_WEIGHT = 1.7
-MASS = 22000.0
+MASS = 24000.0
 GRAVITY = 9.81
 MAX_THRUST = MASS * 9.81 * THRUST_TO_WEIGHT
 HOVER_FRAC = (MASS * GRAVITY) / MAX_THRUST   # ~0.368
@@ -113,7 +113,7 @@ def pid_action(obs):
 
         a_max = MAX_THRUST / MASS - GRAVITY
         brake_dist = (speed * speed) / (2.0 * a_max)
-        margin = 5.0
+        margin = 2.0
 
         if brake_dist + margin >= height_above_pad:
             required_decel = (speed * speed) / (2.0 * height_above_pad)

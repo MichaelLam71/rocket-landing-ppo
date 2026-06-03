@@ -8,6 +8,18 @@ public class RocketController : MonoBehaviour
     public float maxThrust = 367000f;
     public float rcsForce = 400000f;
 
+    [Header("Fuel")]
+    public float dryMass = 22000f;
+    public float fuelMass = 6000f;
+    public float specificImpulse = 282f;
+    private float initialFuelMass;
+
+    [Header("Aerodynamics")]
+    public bool useAirDrag = true;
+    public float airDensity = 1.225f;
+    public float dragCoefficient = 0.30f;
+    public float frontalArea = 10.8f;
+
     [Header("Spawn")]
     public float spawnHeight = 30f;
     public float spawnPosRange = 0f;
@@ -16,6 +28,9 @@ public class RocketController : MonoBehaviour
 
     [Header("Physics")]
     public Vector3 centerOfMass = new Vector3(0f, 0.3f, 0f);
+
+    [Header("Effects")]
+    public ParticleSystem engineFlame;
 
     [Header("Debug")]
     public bool manualControl = false;
@@ -26,7 +41,27 @@ public class RocketController : MonoBehaviour
         rb.centerOfMass = centerOfMass;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+        initialFuelMass = fuelMass;
+        UpdateMass();
         ResetRocket();
+    }
+
+    void FixedUpdate()
+    {
+        ApplyAirDrag();
+
+        if (manualControl)
+        {
+            float thrust = Input.GetKey(KeyCode.Space) ? 1f : 0f;
+            float rcsX = 0f, rcsZ = 0f;
+
+            if (Input.GetKey(KeyCode.W)) rcsX = -1f;
+            if (Input.GetKey(KeyCode.S)) rcsX = 1f;
+            if (Input.GetKey(KeyCode.A)) rcsZ = 1f;
+            if (Input.GetKey(KeyCode.D)) rcsZ = -1f;
+
+            ApplyAction(thrust, rcsX, rcsZ);
+        }
     }
 
     public void ApplyAction(float thrust, float rcsX, float rcsZ)
@@ -35,10 +70,48 @@ public class RocketController : MonoBehaviour
         rb.AddTorque(new Vector3(rcsX * rcsForce, 0f, rcsZ * rcsForce), ForceMode.Force);
 
         // main engine thrust (straight up)
-        if (thrust > 0.01f)
+        if (thrust > 0.01f && fuelMass > 0f)
         {
             rb.AddForce(transform.up * thrust * maxThrust, ForceMode.Force);
+            ConsumeFuel(thrust * maxThrust);
+            ControlFlame(true);
         }
+        else
+        {
+            ControlFlame(false);
+        }
+    }
+
+    void ConsumeFuel(float thrust)
+    {
+        float massFlowRate = thrust / (specificImpulse * 9.81f);
+        fuelMass -= massFlowRate * Time.fixedDeltaTime;
+        if (fuelMass < 0f) fuelMass = 0f;
+        UpdateMass();
+    }
+
+    void UpdateMass()
+    {
+        rb.mass = dryMass + fuelMass;
+    }
+
+    void ApplyAirDrag()
+    {
+        if (!useAirDrag) return;
+
+        Vector3 velocity = rb.linearVelocity;
+        float speed = velocity.magnitude;
+        if (speed < 0.01f) return;
+
+        float dragMagnitude = 0.5f * airDensity * dragCoefficient * frontalArea * speed * speed;
+        rb.AddForce(-velocity.normalized * dragMagnitude, ForceMode.Force);
+    }
+
+    void ControlFlame(bool thrusting)
+    {
+        if (engineFlame == null) return;
+        if (thrusting && !engineFlame.isPlaying) engineFlame.Play();
+        if (!thrusting && engineFlame.isPlaying) engineFlame.Stop();
     }
 
     public void ResetRocket()
@@ -65,21 +138,11 @@ public class RocketController : MonoBehaviour
                 Random.Range(-0.5f, 0.5f),
                 Random.Range(-0.5f, 0.5f));
         }
-    }
 
-    void Update()
-    {
-        if (!manualControl) return;
-
-        float thrust = Input.GetKey(KeyCode.Space) ? 1f : 0f;
-        float rcsX = 0f, rcsZ = 0f;
-
-        if (Input.GetKey(KeyCode.W)) rcsX = -1f;
-        if (Input.GetKey(KeyCode.S)) rcsX = 1f;
-        if (Input.GetKey(KeyCode.A)) rcsZ = 1f;
-        if (Input.GetKey(KeyCode.D)) rcsZ = -1f;
-
-        ApplyAction(thrust, rcsX, rcsZ);
+        // reset fuel
+        fuelMass = initialFuelMass;
+        UpdateMass();
+        ControlFlame(false);
     }
 
     public Rigidbody Rb => rb;
