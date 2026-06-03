@@ -1,6 +1,6 @@
 # Rocket Landing with Reinforcement Learning
 
-A SpaceX Falcon 9-style rocket landing simulation using Proximal Policy Optimization (PPO) trained from scratch in Unity 3D. The agent learns to perform a suicide burn descent and soft vertical landing using a two-phase training pipeline: Behavioral Cloning (BC) from a PID controller, followed by PPO fine-tuning.
+A rocket landing simulation using Proximal Policy Optimization (PPO) implemented from scratch in Unity 3D. The agent learns to perform a suicide burn descent and soft vertical landing using a two-phase training pipeline: Behavioral Cloning (BC) from a PID controller, followed by PPO fine-tuning.
 
 ## Architecture
 
@@ -39,15 +39,15 @@ Python (PPO / BC / PID)  <---TCP socket--->  Unity (Physics / Rendering)
 
 **Phase 1 -- Behavioral Cloning (supervised learning)**
 
-A hand-coded PID controller lands the rocket using a suicide burn algorithm. Every (observation, action) pair is recorded as training data, and a neural network is trained to imitate the PID via supervised learning (MSE loss). This gives the network a competent starting policy without any reward engineering.
+A PID controller lands the rocket using a suicide burn algorithm. Every (observation, action) pair is recorded as training data, and a neural network is trained to imitate the PID via supervised learning (MSE loss). This gives the network a competent starting policy without any reward engineering.
 
 **Phase 2 -- PPO Fine-Tuning (reinforcement learning)**
 
 The BC-trained network is loaded into PPO, which fine-tunes it using terminal-only rewards (+100 to +250 for landing, -100 for crashing). PPO improves landing quality (softer, more upright) and generalises to harder conditions (more tilt, position offset, initial velocity).
 
-### Why Not Train PPO From Scratch?
+### Why Behavioural Cloning?
 
-Training PPO from scratch was attempted and failed. Dense reward shaping (rewarding the agent for getting closer to the pad) caused two failure modes: hovering (the agent farms small per-step rewards by staying alive) and slamming (at high simulation speed, moving faster toward the pad yields more shaping reward per step). Terminal-only rewards are too sparse for a random policy to discover landing by chance. BC solves this by giving PPO a working starting point.
+Training PPO without BC pre-training was attempted, but the agent consistently exploited reward function loopholes rather than learning to land. Dense reward shaping (rewarding the agent for getting closer to the pad) caused two failure modes: hovering (the agent farms small per-step rewards by staying alive) and slamming (at high simulation speed, moving faster toward the pad yields more shaping reward per step). Terminal-only rewards are too sparse for a random policy to discover landing by chance. BC solves this by giving PPO a working starting point.
 
 ### Observation Space (15 floats)
 
@@ -70,14 +70,14 @@ All values clamped to [-5, 5].
 | 2 | RCS torque Z-axis | [-1, 1] | controls roll |
 
 ### Reward Function (terminal only)
-
-- **Successful landing:** 100 + speed_bonus + tilt_bonus (max 250)
+ 
+- **Successful landing:** 100 + speed_bonus + tilt_bonus + proximity_bonus (max 300)
   - speed_bonus = (1 - speed / speed_limit) * 100
   - tilt_bonus = (1 - tilt / tilt_limit) * 50
-- **Crash:** -100
+  - proximity_bonus = (1 - distance_to_pad / landing_radius) * 50
+- **Crash:** -100 (includes landing too fast, too tilted, or too far from pad)
 - **Per step:** -0.01 (small time penalty)
-
-No distance-based shaping. This is intentional and critical for stability at high simulation speeds.
+No distance-based shaping during flight. This is intentional and critical for stability at high simulation speeds. The proximity bonus only applies at touchdown.
 
 ## Setup
 
@@ -151,7 +151,6 @@ python Behaviorcloning.py
 
 Trains the actor network on PID demos using MSE loss. Saves weights to `NN/actor.pth`. Check that the validation loss converges (should reach around 0.001 or lower).
 
-**Critical:** The script sets `log_std = -2.0` before saving. This controls exploration noise in PPO. Without this, PPO adds huge random noise to actions and the rocket spirals out of control.
 
 ### Step 3: Evaluate the BC Policy
 
