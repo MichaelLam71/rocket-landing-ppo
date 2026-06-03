@@ -113,6 +113,7 @@ for epoch in range(EPOCHS):
         print(f"Epoch {epoch+1:3d}  train_loss={avg_train:.6f}  val_loss={val_loss:.6f}")
 
 # save
+actor.log_std.data.fill_(-2.0)  # std = 0.135, gentle exploration
 torch.save(actor.state_dict(), f"{SAVE_DIR}/actor.pth")
 print(f"\nSaved actor to {SAVE_DIR}/actor.pth")
 print("You can now run Evaluate.py to test it in Unity,")

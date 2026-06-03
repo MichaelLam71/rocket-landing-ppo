@@ -15,15 +15,15 @@ public class PythonBridge : MonoBehaviour
 
     [Header("Environment")]
     public Transform landingPad;
-    public float maxEpisodeTime = 15f;
+    public float maxEpisodeTime = 30f;
     public float timeScale = 10f;
     public bool useGimbal = true;
 
     [Header("Done Conditions")]
-    public float padHeight = 1.0f;
+    public float padHeight = 3.0f;
     public float landingSpeedLimit = 3f;
-    public float landingTiltLimit = 25f;
-    public float tiltCrashLimit = 70f;
+    public float landingTiltLimit = 10f;
+    public float tiltCrashLimit = 45f;
     public float outOfBoundsHeight = 200f;
     public float outOfBoundsXZ = 200f;
 
@@ -39,8 +39,10 @@ public class PythonBridge : MonoBehaviour
     private bool crashed = false;
     private int obsSize = 15;
 
-    // for potential-based shaping (set this up for whatever reward you try)
-    private float prevShaping = 0f;
+    // cached action: applied EVERY physics frame so timeScale works correctly
+    private float cachedThrust = 0f;
+    private float cachedGimbalX = 0f;
+    private float cachedGimbalZ = 0f;
 
     // threading
     private float[] latestAction = null;
@@ -83,7 +85,6 @@ public class PythonBridge : MonoBehaviour
 
             lock (lockObj) { latestAction = action; actionReady = true; }
 
-            // wait for FixedUpdate to consume this action
             while (connected)
             {
                 lock (lockObj) { if (!actionReady) break; }
@@ -94,12 +95,17 @@ public class PythonBridge : MonoBehaviour
 
     void FixedUpdate()
     {
+        // ALWAYS apply cached thrust every physics frame.
+        // Between Python commands, the rocket keeps thrusting. Makes timeScale safe.
+        rocket.ApplyAction(cachedThrust, cachedGimbalX, cachedGimbalZ);
+        episodeTimer += Time.fixedDeltaTime;
+
         if (!connected) return;
 
         float[] action;
         lock (lockObj)
         {
-            if (!actionReady) return;   // never block the main thread
+            if (!actionReady) return;
             action = latestAction;
         }
 
@@ -107,24 +113,33 @@ public class PythonBridge : MonoBehaviour
         {
             if (action[0] <= -990f)
             {
+                // Reset
                 rocket.ResetRocket();
                 episodeTimer = 0f;
                 landed = false;
                 crashed = false;
-                InitShaping();
+                cachedThrust = 0f;
+                cachedGimbalX = 0f;
+                cachedGimbalZ = 0f;
                 SendState(false);
             }
             else
             {
-                float thrust  = Mathf.Clamp01((action[0] + 1f) / 2f);
-                float gimbalX = useGimbal ? Mathf.Clamp(action[1], -1f, 1f) : 0f;
-                float gimbalZ = useGimbal ? Mathf.Clamp(action[2], -1f, 1f) : 0f;
-
-                rocket.ApplyAction(thrust, gimbalX, gimbalZ);
-                episodeTimer += Time.fixedDeltaTime;
+                // Apply action
+                cachedThrust  = Mathf.Clamp01((action[0] + 1f) / 2f);
+                cachedGimbalX = useGimbal ? Mathf.Clamp(action[1], -1f, 1f) : 0f;
+                cachedGimbalZ = useGimbal ? Mathf.Clamp(action[2], -1f, 1f) : 0f;
 
                 bool done = CheckDone();
                 SendState(done);
+
+                // Cut engine on episode end
+                if (done)
+                {
+                    cachedThrust = 0f;
+                    cachedGimbalX = 0f;
+                    cachedGimbalZ = 0f;
+                }
             }
         }
         catch (Exception e)
@@ -151,16 +166,14 @@ public class PythonBridge : MonoBehaviour
             if (speed < landingSpeedLimit && tilt < landingTiltLimit)
             {
                 landed = true;
-                Debug.Log($"LANDED speed={speed:F2} tilt={tilt:F1}");
             }
             else
             {
                 crashed = true;
-                Debug.Log($"CRASHED speed={speed:F2} tilt={tilt:F1}");
             }
             return true;
         }
-        if (tilt > tiltCrashLimit)     { crashed = true; return true; }
+        if (tilt > tiltCrashLimit)         { crashed = true; return true; }
         if (episodeTimer > maxEpisodeTime) { crashed = true; return true; }
         if (height > outOfBoundsHeight ||
             Mathf.Abs(transform.position.x) > outOfBoundsXZ ||
@@ -170,40 +183,21 @@ public class PythonBridge : MonoBehaviour
         return false;
     }
 
-    // ==================== REWARD (edit this!) ====================
-    void InitShaping()
-    {
-        // called once after each reset. set up any "previous" values here.
-        float dist = Vector3.Distance(transform.position, landingPad.position);
-        prevShaping = -dist;
-    }
-
+    // ==================== REWARD ====================
     float ComputeReward(bool done)
     {
-        // --- EDIT THIS FUNCTION TO TRY DIFFERENT REWARDS ---
-        // everything below is one example; swap it out freely.
+        float speed = rb.linearVelocity.magnitude;
 
-        float height = transform.position.y;
-        float speed  = rb.linearVelocity.magnitude;
-        float dist   = Vector3.Distance(transform.position, landingPad.position);
+        if (landed)
+        {
+            float tilt = Vector3.Angle(transform.up, Vector3.up);
+            float softBonus = (1f - speed / landingSpeedLimit) * 100f;
+            float tiltBonus = (1f - tilt / landingTiltLimit) * 50f;
+            return 100f + softBonus + tiltBonus;
+        }
+        if (crashed) return -100f;
 
-        // terminal
-        if (landed)  return 100f;
-        if (crashed) return -50f - speed * 5f;
-
-        // potential-based shaping: reward for getting closer to pad
-        float shaping = -dist;
-        float reward  = shaping - prevShaping;
-        prevShaping   = shaping;
-
-        // time cost
-        reward -= 0.05f;
-
-        // near-ground speed penalty
-        if (height < 3f)
-            reward -= Mathf.Abs(rb.linearVelocity.y) * 0.2f;
-
-        return reward;
+        return -0.01f;
     }
 
     // ==================== OBSERVATION ====================
