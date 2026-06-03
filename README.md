@@ -87,11 +87,11 @@ No distance-based shaping during flight. This is intentional and critical for st
 - PyTorch
 - NumPy
 - Matplotlib
-- Unity 2022+ with the project open
+- Unity 6.4 (6000.4.6f1)
 
 ### Unity Setup
 
-1. Open the Unity project
+1. Open the Unity project (If "project invalid" pops up, rename project file to only contain lowercase letters)
 2. Attach `RocketController.cs` and `PythonBridge.cs` to the rocket GameObject
 3. The rocket needs a `Rigidbody` component
 4. Create an empty GameObject as the landing pad and assign it to PythonBridge's `landingPad` field
