@@ -1,3 +1,22 @@
+# Mac
+.DS_Store
+
+# VSCode
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+
+# Models
+NN/
+*.pth
+*.pt
+
+# Training outputs
+results/
+*.npz
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
