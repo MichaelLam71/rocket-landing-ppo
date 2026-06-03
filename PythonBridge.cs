@@ -23,6 +23,7 @@ public class PythonBridge : MonoBehaviour
     public float padHeight = 3.0f;
     public float landingSpeedLimit = 3f;
     public float landingTiltLimit = 10f;
+    public float landingRadius = 5f;
     public float tiltCrashLimit = 45f;
     public float outOfBoundsHeight = 200f;
     public float outOfBoundsXZ = 200f;
@@ -163,7 +164,11 @@ public class PythonBridge : MonoBehaviour
 
         if (height <= padHeight)
         {
-            if (speed < landingSpeedLimit && tilt < landingTiltLimit)
+            float distToPad = Vector2.Distance(
+                new Vector2(transform.position.x, transform.position.z),
+                new Vector2(landingPad.position.x, landingPad.position.z));
+
+            if (speed < landingSpeedLimit && tilt < landingTiltLimit && distToPad < landingRadius)
             {
                 landed = true;
             }
@@ -191,9 +196,13 @@ public class PythonBridge : MonoBehaviour
         if (landed)
         {
             float tilt = Vector3.Angle(transform.up, Vector3.up);
+            float distToPad = Vector2.Distance(
+                new Vector2(transform.position.x, transform.position.z),
+                new Vector2(landingPad.position.x, landingPad.position.z));
             float softBonus = (1f - speed / landingSpeedLimit) * 100f;
             float tiltBonus = (1f - tilt / landingTiltLimit) * 50f;
-            return 100f + softBonus + tiltBonus;
+            float proximityBonus = (1f - distToPad / landingRadius) * 50f;
+            return 100f + softBonus + tiltBonus + proximityBonus;
         }
         if (crashed) return -100f;
 
