@@ -39,7 +39,7 @@ Python (PPO / BC / PID)  <---TCP socket--->  Unity (Physics / Rendering)
 
 **Phase 1 -- Behavioral Cloning (supervised learning)**
 
-A hand-coded PID controller lands the rocket using a suicide burn algorithm. We record every (observation, action) pair as training data, then train a neural network to imitate the PID via supervised learning (MSE loss). This gives the network a competent starting policy without any reward engineering.
+A hand-coded PID controller lands the rocket using a suicide burn algorithm. Every (observation, action) pair is recorded as training data, and a neural network is trained to imitate the PID via supervised learning (MSE loss). This gives the network a competent starting policy without any reward engineering.
 
 **Phase 2 -- PPO Fine-Tuning (reinforcement learning)**
 
@@ -47,7 +47,7 @@ The BC-trained network is loaded into PPO, which fine-tunes it using terminal-on
 
 ### Why Not Train PPO From Scratch?
 
-We tried. Dense reward shaping (rewarding the agent for getting closer to the pad) caused two failure modes: hovering (the agent farms small per-step rewards by staying alive) and slamming (at high simulation speed, moving faster toward the pad yields more shaping reward per step). Terminal-only rewards are too sparse for a random policy to discover landing by chance. BC solves this by giving PPO a working starting point.
+Training PPO from scratch was attempted and failed. Dense reward shaping (rewarding the agent for getting closer to the pad) caused two failure modes: hovering (the agent farms small per-step rewards by staying alive) and slamming (at high simulation speed, moving faster toward the pad yields more shaping reward per step). Terminal-only rewards are too sparse for a random policy to discover landing by chance. BC solves this by giving PPO a working starting point.
 
 ### Observation Space (15 floats)
 
@@ -215,7 +215,7 @@ The project uses Reaction Control System (RCS) thrusters for attitude control in
 - **RCS works at all times.** The rocket can correct its orientation during free fall, enabling fuel-optimal descent profiles.
 - **Simpler control mapping.** RCS torque is linear (command directly maps to torque). Gimbal torque depends on both gimbal angle AND thrust level (nonlinear coupling), which is harder for the neural network to learn.
 
-This mirrors real rocket design. Falcon 9 uses engine gimbal, cold gas thrusters (RCS), and grid fins together. Our simulation uses RCS as the sole attitude actuator with proportionally higher authority to compensate.
+This mirrors real rocket design. Falcon 9 uses engine gimbal, cold gas thrusters (RCS), and grid fins together. This simulation uses RCS as the sole attitude actuator with proportionally higher authority to compensate.
 
 ### Cached Thrust (timeScale Safety)
 
