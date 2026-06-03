@@ -13,6 +13,9 @@ Python (PPO / BC / PID)  <---TCP socket--->  Unity (Physics / Rendering)
     Reward logic                             PythonBridge.cs
     Training loop                            Rigidbody physics
 ```
+## Socket Protocol
+
+Python sends 3 floats (thrust, rcsX, rcsZ). Unity replies with 17 floats (15 observations + 1 reward + 1 done flag). Reset signal: thrust = -999.
 
 ## Project Structure
 
@@ -43,7 +46,7 @@ A PID controller lands the rocket using a suicide burn algorithm. Every (observa
 
 **Phase 2 -- PPO Fine-Tuning (reinforcement learning)**
 
-The BC-trained network is loaded into PPO, which fine-tunes it using terminal-only rewards (+100 to +250 for landing, -100 for crashing). PPO improves landing quality (softer, more upright) and generalises to harder conditions (more tilt, position offset, initial velocity).
+The BC-trained network is loaded into PPO, which fine-tunes it using terminal-only rewards (+100 to +300 for landing, -100 for crashing). PPO improves landing quality (softer, more upright) and generalises to harder conditions (more tilt, position offset, initial velocity).
 
 ### Why Behavioural Cloning?
 
@@ -86,6 +89,11 @@ PPO is a policy gradient algorithm using two neural networks. The **Actor** take
 Each iteration collects 512 steps of experience, then computes advantages using Generalized Advantage Estimation (GAE, lambda=0.95), answering: "was this action better or worse than expected?" The policy is then updated using the clipped surrogate objective, where the probability ratio between new and old policy is clamped to [0.95, 1.05] to prevent destructively large updates.
 
 Additional stability mechanisms include an entropy bonus (prevents the policy from collapsing to deterministic actions), gradient clipping (caps update magnitude from outlier batches), learning rate linear decay, and action clamping to [-1, 1].
+
+### Network Architecture
+
+- **Actor:** 15 inputs -> 256 hidden -> 256 hidden -> 3 outputs (ReLU activations, Gaussian output with learnable log_std)
+- **Critic:** 15 inputs -> 256 hidden -> 256 hidden -> 1 output (ReLU activations)
 
 ## Setup
 
@@ -212,30 +220,7 @@ When using "PPO only", change the Inspector values in Unity and run Unity_PPO.py
 
 When a new skill is needed (e.g. lateral correction for position offsets), collect new PID demos at that difficulty and re-run the full pipeline from Step 1.
 
-## Technical Details
 
-### RCS vs Gimbal
-
-The project uses Reaction Control System (RCS) thrusters for attitude control instead of engine gimbaling. RCS applies torque directly to the rocket body (`rb.AddTorque`), independent of main engine state. This was chosen because:
-
-- **Gimbal only works when the engine fires.** During the free-fall phase of a suicide burn, the engine is off and gimbal provides zero attitude authority. Any initial tilt grows uncorrected.
-- **RCS works at all times.** The rocket can correct its orientation during free fall, enabling fuel-optimal descent profiles.
-- **Simpler control mapping.** RCS torque is linear (command directly maps to torque). Gimbal torque depends on both gimbal angle AND thrust level (nonlinear coupling), which is harder for the neural network to learn.
-
-This mirrors real rocket design. Falcon 9 uses engine gimbal, cold gas thrusters (RCS), and grid fins together. This simulation uses RCS as the sole attitude actuator with proportionally higher authority to compensate.
-
-### Cached Thrust (timeScale Safety)
-
-PythonBridge applies the last received thrust command every physics frame (`FixedUpdate`), not just when a new action arrives. This is critical because at `timeScale = 10`, Unity runs approximately 10 physics frames between Python actions. Without caching, the rocket free-falls between commands and the suicide burn fails.
-
-### Network Architecture
-
-- **Actor:** 15 inputs -> 256 hidden -> 256 hidden -> 3 outputs (ReLU activations, Gaussian output with learnable log_std)
-- **Critic:** 15 inputs -> 256 hidden -> 256 hidden -> 1 output (ReLU activations)
-
-### Socket Protocol
-
-Python sends 3 floats (thrust, rcsX, rcsZ). Unity replies with 17 floats (15 observations + 1 reward + 1 done flag). Reset signal: thrust = -999.
 
 ## Troubleshooting
 
