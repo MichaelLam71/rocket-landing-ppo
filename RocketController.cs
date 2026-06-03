@@ -4,63 +4,40 @@ public class RocketController : MonoBehaviour
 {
     private Rigidbody rb;
 
-    [Header("References")]
-    public Transform enginePivot;
-
     [Header("Engine")]
-    public float maxThrust = 800f;
-    public float gimbalAngle = 20f;
-    public float gimbalSmoothSpeed = 10f;
+    public float maxThrust = 367000f;
+    public float rcsForce = 400000f;
 
     [Header("Spawn")]
-    public float spawnHeight = 5f;
+    public float spawnHeight = 30f;
     public float spawnPosRange = 0f;
-    public float spawnAngleRange = 0f;
+    public float spawnAngleRange = 5f;
     public float spawnVelocityRange = 0f;
 
     [Header("Physics")]
     public Vector3 centerOfMass = new Vector3(0f, 0.3f, 0f);
 
-    private float currentGimbalX = 0f;
-    private float currentGimbalZ = 0f;
+    [Header("Debug")]
+    public bool manualControl = false;
 
     void Awake()
     {
         rb = GetComponent<Rigidbody>();
-
-        if (enginePivot == null)
-        {
-            GameObject pivot = new GameObject("EnginePivot");
-            pivot.transform.SetParent(transform);
-            pivot.transform.localPosition = new Vector3(0f, -1f, 0f);
-            pivot.transform.localRotation = Quaternion.identity;
-            enginePivot = pivot.transform;
-            Debug.Log("Auto-created EnginePivot");
-        }
-
         rb.centerOfMass = centerOfMass;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
-
         ResetRocket();
     }
 
-    public void ApplyAction(float thrust, float gimbalX, float gimbalZ)
+    public void ApplyAction(float thrust, float rcsX, float rcsZ)
     {
-        currentGimbalX = Mathf.Lerp(currentGimbalX, gimbalX * gimbalAngle,
-            Time.fixedDeltaTime * gimbalSmoothSpeed);
-        currentGimbalZ = Mathf.Lerp(currentGimbalZ, gimbalZ * gimbalAngle,
-            Time.fixedDeltaTime * gimbalSmoothSpeed);
+        // RCS attitude control (works even without main engine)
+        rb.AddTorque(new Vector3(rcsX * rcsForce, 0f, rcsZ * rcsForce), ForceMode.Force);
 
-        enginePivot.localRotation = Quaternion.Euler(currentGimbalX, 0f, currentGimbalZ);
-
+        // main engine thrust (straight up)
         if (thrust > 0.01f)
         {
-            rb.AddForceAtPosition(
-                enginePivot.up * thrust * maxThrust,
-                enginePivot.position,
-                ForceMode.Force
-            );
+            rb.AddForce(transform.up * thrust * maxThrust, ForceMode.Force);
         }
     }
 
@@ -88,13 +65,23 @@ public class RocketController : MonoBehaviour
                 Random.Range(-0.5f, 0.5f),
                 Random.Range(-0.5f, 0.5f));
         }
-
-        currentGimbalX = 0f;
-        currentGimbalZ = 0f;
-        enginePivot.localRotation = Quaternion.identity;
     }
 
-    // public getters so PythonBridge (or a PID controller) can read physics
+    void Update()
+    {
+        if (!manualControl) return;
+
+        float thrust = Input.GetKey(KeyCode.Space) ? 1f : 0f;
+        float rcsX = 0f, rcsZ = 0f;
+
+        if (Input.GetKey(KeyCode.W)) rcsX = -1f;
+        if (Input.GetKey(KeyCode.S)) rcsX = 1f;
+        if (Input.GetKey(KeyCode.A)) rcsZ = 1f;
+        if (Input.GetKey(KeyCode.D)) rcsZ = -1f;
+
+        ApplyAction(thrust, rcsX, rcsZ);
+    }
+
     public Rigidbody Rb => rb;
     public float Mass => rb.mass;
 }
