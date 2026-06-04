@@ -1,7 +1,7 @@
 """
 BehavioralCloning.py
 --------------------
-Trains the Actor network to imitate the PID controller using supervised learning.
+Trains Actor network to imitate the PID controller using supervised learning.
 No reward function, no PPO, no GAE. Just minimize the difference between
 the network's output and the PID's recorded actions.
 
@@ -30,7 +30,7 @@ BATCH_SIZE = 256
 LR = 0.001
 
 
-# same Actor architecture as PPO script
+# same Actor architecture as your PPO script
 class Actor(nn.Module):
     def __init__(self, inp, hidden, outp):
         super().__init__()
