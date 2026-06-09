@@ -4,6 +4,7 @@ PID_Collect.py
 Connects to Unity through the same socket bridge as the PPO script.
 Runs a simple PID controller that lands the rocket, and records
 (observation, action) pairs as training data for behavioral cloning.
+Only saves successful landing episodes.
 """
 
 import numpy as np
@@ -11,44 +12,12 @@ import socket
 import struct
 import os
 
+
 # ==================== CONFIG ====================
-NUM_EPISODES = 50     # how many landings to record
-HOST = "127.0.0.1"
-PORT = 5005
-OBS_SIZE = 15
-ACTION_SIZE = 3
+from config import *
+
+NUM_EPISODES = 100
 SAVE_PATH = os.path.join(os.path.dirname(__file__), "demos.npz")
-PAD_HEIGHT = 3
-
-# observation scaling (must match PythonBridge Inspector values!)
-POS_SCALE = 50.0
-VEL_SCALE = 20.0
-ANG_VEL_SCALE = 10.0
-
-# rocket physics (must match Unity Inspector!)
-THRUST_TO_WEIGHT = 1.7
-MASS = 24000.0
-GRAVITY = 9.81
-MAX_THRUST = MASS * 9.81 * THRUST_TO_WEIGHT
-HOVER_FRAC = (MASS * GRAVITY) / MAX_THRUST   # ~0.368
-
-# PID gains & Descent Targets
-KP_THRUST = 0.5
-TARGET_VY_HIGH = -6.0
-TARGET_VY_LOW  = -0.5
-DECEL_HEIGHT   = 8.0
-
-MIN_DESCENT_THRUST = 0.15 
-
-# gimbal PID
-USE_GIMBAL = True
-KP_GIMBAL = 0.8
-KD_GIMBAL = 0
-
-
-SPAWN_HEIGHT = 30
-
-
 
 
 # ==================== SOCKET ====================
@@ -113,7 +82,7 @@ def pid_action(obs):
 
         a_max = MAX_THRUST / MASS - GRAVITY
         brake_dist = (speed * speed) / (2.0 * a_max)
-        margin = 2.0
+        margin = max(2.0, speed * 0.15)
 
         if brake_dist + margin >= height_above_pad:
             required_decel = (speed * speed) / (2.0 * height_above_pad)
@@ -144,6 +113,9 @@ for ep in range(NUM_EPISODES):
     done = False
     steps_count = 0
 
+    episode_obs = []
+    episode_actions = []
+
     while not done:
         action = pid_action(obs)
         
@@ -156,17 +128,24 @@ for ep in range(NUM_EPISODES):
                   f"angX={obs[9]*ANG_VEL_SCALE:.3f} angZ={obs[11]*ANG_VEL_SCALE:.3f}")
         steps_count += 1
         
-        all_obs.append(obs.copy())
-        all_actions.append(action)
+        episode_obs.append(obs.copy())
+        episode_actions.append(action)
         obs, reward, done = env.step(action)
 
     if reward > 0:
         landings += 1
+        all_obs.extend(episode_obs)
+        all_actions.extend(episode_actions)
     else:
         crashes += 1
+        height = obs[1] * POS_SCALE
+        vel_y = obs[4] * VEL_SCALE
+        tilt_x = obs[6]
+        tilt_z = obs[8]
+        print(f"  CRASH ep={ep+1} h={height:.1f} vy={vel_y:.1f} "
+              f"tiltX={tilt_x:.3f} tiltZ={tilt_z:.3f}")
 
     if (ep + 1) % 20 == 0:
-        # save every 20 episodes
         obs_array = np.array(all_obs, dtype=np.float32)
         act_array = np.array(all_actions, dtype=np.float32)
         np.savez(SAVE_PATH, observations=obs_array, actions=act_array)
@@ -181,5 +160,5 @@ obs_array = np.array(all_obs, dtype=np.float32)
 act_array = np.array(all_actions, dtype=np.float32)
 np.savez(SAVE_PATH, observations=obs_array, actions=act_array)
 
-print(f"\nDone! Saved {len(all_obs)} samples to {SAVE_PATH}")
+print(f"\nDone! Saved {len(all_obs)} successful samples to {SAVE_PATH}")
 print(f"Landing rate: {100*landings/NUM_EPISODES:.0f}%")

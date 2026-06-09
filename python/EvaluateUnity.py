@@ -6,27 +6,22 @@ import os
 import socket
 import struct
 import math
+import time
+from config import OBS_SIZE, ACTION_SIZE, HIDDEN, HOST, PORT, POS_SCALE, VEL_SCALE
 
 SAVE_DIR = os.path.join(os.path.dirname(__file__), "NN")
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
-NUM_EPISODES = 50
-OBS_SIZE = 15
-ACTION_SIZE = 3
-HIDDEN = 256
-
-# observation scaling (must match PythonBridge Inspector)
-POS_SCALE = 50.0
-VEL_SCALE = 20.0
+NUM_EPISODES = 10000
 TO_LAND_SCALE = 50.0
 
 
 class UnityEnv:
-    def __init__(self, host="127.0.0.1", port=5005):
+    def __init__(self):
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.server.bind((host, port))
+        self.server.bind((HOST, PORT))
         self.server.listen(1)
         print("Waiting for Unity to connect...")
         self.conn, _ = self.server.accept()
@@ -83,8 +78,7 @@ def decode_obs(obs):
     height = obs[1] * POS_SCALE
     vel = np.array([obs[3], obs[4], obs[5]]) * VEL_SCALE
     speed = np.linalg.norm(vel)
-    up_y = obs[7]
-    up_y = max(-1.0, min(1.0, up_y))
+    up_y = max(-1.0, min(1.0, obs[7]))
     tilt = math.degrees(math.acos(up_y))
     to_pad = np.array([obs[12], obs[13], obs[14]]) * TO_LAND_SCALE
     dist = np.linalg.norm(to_pad)
@@ -115,24 +109,21 @@ for ep in range(NUM_EPISODES):
     while not done:
         with torch.no_grad():
             dist = actor(torch.tensor(obs, dtype=torch.float32))
-            action = dist.mean
-            action = action.clamp(-1, 1)
+            action = dist.mean.clamp(-1, 1)
 
         obs, reward, done = env.step(action.numpy())
         total_reward += reward
         last_obs = obs
         steps += 1
 
-    height, speed, tilt, dist = decode_obs(last_obs)
-
-    # use reward to determine success (PythonBridge already checks correctly)
+    height, speed, tilt, dist_to_pad = decode_obs(last_obs)
     landed = total_reward > 0
 
     if landed:
         successes += 1
         landing_speeds.append(speed)
         landing_tilts.append(tilt)
-        landing_dists.append(dist)
+        landing_dists.append(dist_to_pad)
 
     episode_lengths.append(steps)
     episode_rewards.append(total_reward)
@@ -140,7 +131,9 @@ for ep in range(NUM_EPISODES):
     status = "LANDED" if landed else "crashed"
     print(f"Episode {ep+1:2d}: {status:8s} | "
           f"speed={speed:5.2f} m/s | tilt={tilt:5.1f} deg | "
-          f"dist={dist:5.2f} m | reward={total_reward:7.1f}")
+          f"dist={dist_to_pad:5.2f} m | reward={total_reward:7.1f}")
+
+    time.sleep(1.0)
 
 env.close()
 

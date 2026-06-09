@@ -1,0 +1,10 @@
+{
+    "DRY_MASS": 22000.0,
+    "FUEL_MASS": 2000.0,
+    "MAX_THRUST": 470880.0,
+    "GRAVITY": 9.81,
+    "PAD_HEIGHT": 5.2,
+    "POS_SCALE": 50.0,
+    "VEL_SCALE": 20.0,
+    "ANG_VEL_SCALE": 10.0
+}

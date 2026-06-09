@@ -5,12 +5,12 @@ public class RocketController : MonoBehaviour
     private Rigidbody rb;
 
     [Header("Engine")]
-    public float maxThrust = 367000f;
-    public float rcsForce = 400000f;
+    public float maxThrust = 400248.0f;
+    public float rcsForce = 2000000f;
 
     [Header("Fuel")]
     public float dryMass = 22000f;
-    public float fuelMass = 6000f;
+    public float fuelMass = 2000f;
     public float specificImpulse = 282f;
     private float initialFuelMass;
 
@@ -21,7 +21,7 @@ public class RocketController : MonoBehaviour
     public float frontalArea = 10.8f;
 
     [Header("Spawn")]
-    public float spawnHeight = 30f;
+    public float spawnHeight = 200f;
     public float spawnPosRange = 0f;
     public float spawnAngleRange = 5f;
     public float spawnVelocityRange = 0f;
@@ -48,6 +48,10 @@ public class RocketController : MonoBehaviour
 
     void FixedUpdate()
     {
+        
+        Vector3 angVel = rb.angularVelocity;
+        angVel.y *= 0.95f;  // dampen 5% per frame
+        rb.angularVelocity = angVel;
         ApplyAirDrag();
 
         if (manualControl)
@@ -147,4 +151,6 @@ public class RocketController : MonoBehaviour
 
     public Rigidbody Rb => rb;
     public float Mass => rb.mass;
+
+    
 }

@@ -235,3 +235,37 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# Unity
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+*.csproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+# Python artifacts
+python/demos.npz
+python/NN/*.pth
+python/results/
+python/__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+Thumbs.db

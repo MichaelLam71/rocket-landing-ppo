@@ -16,16 +16,16 @@ public class PythonBridge : MonoBehaviour
     [Header("Environment")]
     public Transform landingPad;
     public float maxEpisodeTime = 30f;
-    public float timeScale = 10f;
+    public float timeScale = 1f;
     public bool useGimbal = true;
 
     [Header("Done Conditions")]
-    public float padHeight = 3.0f;
+    public float padHeight = 4.9818f;
     public float landingSpeedLimit = 3f;
     public float landingTiltLimit = 10f;
     public float landingRadius = 5f;
     public float tiltCrashLimit = 45f;
-    public float outOfBoundsHeight = 200f;
+    public float outOfBoundsHeight = 400f;
     public float outOfBoundsXZ = 200f;
 
     [Header("Observation Scaling")]
@@ -283,4 +283,5 @@ public class PythonBridge : MonoBehaviour
         stream?.Close();
         client?.Close();
     }
+    
 }

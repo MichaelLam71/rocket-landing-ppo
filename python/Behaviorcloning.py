@@ -2,14 +2,12 @@
 BehavioralCloning.py
 --------------------
 Trains the Actor network to imitate the PID controller using supervised learning.
-No reward function, no PPO, no GAE. Just minimize the difference between
-the network's output and the PID's recorded actions.
 
 Usage:
   1. Run PID_Collect.py first to generate demos.npz
-  2. Run this script: python BehavioralCloning.py
+  2. Run this script: python Behaviorcloning.py
   3. It trains the Actor and saves weights to NN/actor.pth
-  4. Use existing Evaluate.py (or PPO with RESUME=True) to test/fine-tune
+  4. Use EvaluateUnity.py or PPO with RESUME=True to test/fine-tune
 """
 
 import torch
@@ -17,20 +15,17 @@ import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+from config import OBS_SIZE, ACTION_SIZE, HIDDEN
 
 DEMO_PATH = os.path.join(os.path.dirname(__file__), "demos.npz")
 SAVE_DIR  = os.path.join(os.path.dirname(__file__), "NN")
 os.makedirs(SAVE_DIR, exist_ok=True)
 
-OBS_SIZE = 15
-ACTION_SIZE = 3
-HIDDEN = 256
 EPOCHS = 100
 BATCH_SIZE = 256
 LR = 0.001
 
 
-# same Actor architecture as PPO script
 class Actor(nn.Module):
     def __init__(self, inp, hidden, outp):
         super().__init__()
@@ -48,7 +43,6 @@ class Actor(nn.Module):
         return torch.distributions.Normal(mean, stds)
 
     def predict(self, x):
-        """Deterministic forward pass (just the mean, no sampling)."""
         x = self.relu(self.fc1(x))
         x = self.relu(self.fc2(x))
         return self.fc3(x)
@@ -78,12 +72,10 @@ val_losses = []
 
 print(f"Training for {EPOCHS} epochs...")
 for epoch in range(EPOCHS):
-    # shuffle training data
     perm = torch.randperm(len(train_obs))
     train_obs = train_obs[perm]
     train_act = train_act[perm]
 
-    # mini-batch training
     epoch_loss = 0
     n_batches = 0
     for i in range(0, len(train_obs), BATCH_SIZE):
@@ -100,7 +92,6 @@ for epoch in range(EPOCHS):
         epoch_loss += loss.item()
         n_batches += 1
 
-    # validation
     with torch.no_grad():
         val_pred = actor.predict(val_obs)
         val_loss = loss_fn(val_pred, val_act).item()
@@ -112,12 +103,10 @@ for epoch in range(EPOCHS):
     if (epoch + 1) % 10 == 0:
         print(f"Epoch {epoch+1:3d}  train_loss={avg_train:.6f}  val_loss={val_loss:.6f}")
 
-# save
-actor.log_std.data.fill_(-2.0)  # std = 0.135, gentle exploration
+# save with tightened exploration noise
+actor.log_std.data.fill_(-3.0)
 torch.save(actor.state_dict(), f"{SAVE_DIR}/actor.pth")
 print(f"\nSaved actor to {SAVE_DIR}/actor.pth")
-print("You can now run Evaluate.py to test it in Unity,")
-print("or set RESUME=True in Unity_PPO.py to fine-tune with RL.")
 
 # plot
 plt.figure(figsize=(10, 5))
