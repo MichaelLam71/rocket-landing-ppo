@@ -20,20 +20,27 @@ Python sends 3 floats (thrust, rcsX, rcsZ). Unity replies with 17 floats (15 obs
 ## Project Structure
 
 ```
-├── PID_collect.py         # Step 1: PID controller collects landing demonstrations
-├── Behaviorcloning.py     # Step 2: Train neural network to imitate PID
-├── Unity_PPO.py           # Step 3: Fine-tune with PPO reinforcement learning
-├── EvaluateUnity.py       # Step 4: Test trained policy (deterministic)
-├── demos.npz              # Generated: PID demonstration data
-├── NN/
-│   ├── actor.pth          # Trained actor (policy) weights
-│   └── critic.pth         # Trained critic (value function) weights
-├── results/
-│   ├── bc_training.png    # BC loss curves
-│   └── training_curve.png # PPO reward curve
-└── Assets/Scripts/        # Unity C# scripts
-    ├── RocketController.cs
-    └── PythonBridge.cs
+├── Assets/                    # Unity project files
+│   └── Scripts/
+│       ├── RocketController.cs
+│       └── PythonBridge.cs
+├── ProjectSettings/           # Unity project settings
+├── Packages/                  # Unity package manifest
+├── python/
+│   ├── config.py              # Single source of truth for all constants
+│   ├── PID_collect.py         # Step 1: PID controller collects landing demonstrations
+│   ├── Behaviorcloning.py     # Step 2: Train neural network to imitate PID
+│   ├── Unity_PPO.py           # Step 3: Fine-tune with PPO reinforcement learning
+│   ├── EvaluateUnity.py       # Step 4: Test trained policy (deterministic)
+│   ├── demos.npz              # Generated: PID demonstration data
+│   ├── NN/
+│   │   ├── actor.pth          # Trained actor (policy) weights
+│   │   └── critic.pth         # Trained critic (value function) weights
+│   └── results/
+│       ├── bc_training.png    # BC loss curves
+│       ├── training_curves.png # PPO training curves
+│       └── training_log.json  # PPO training log (recoverable)
+└── .gitignore
 ```
 
 ## How It Works
@@ -42,7 +49,7 @@ Python sends 3 floats (thrust, rcsX, rcsZ). Unity replies with 17 floats (15 obs
 
 **Phase 1 -- Behavioral Cloning (supervised learning)**
 
-A PID controller lands the rocket using a suicide burn algorithm. Every (observation, action) pair is recorded as training data, and a neural network is trained to imitate the PID via supervised learning (MSE loss). This gives the network a competent starting policy without any reward engineering.
+A PID controller lands the rocket using a suicide burn algorithm. Every (observation, action) pair is recorded as training data, and a neural network is trained to imitate the PID via supervised learning (MSE loss). This gives the network a competent starting policy without any reward engineering. Only successful landing episodes are saved to the training data.
 
 **Phase 2 -- PPO Fine-Tuning (reinforcement learning)**
 
@@ -74,7 +81,7 @@ All values clamped to [-5, 5].
 
 ### Physics Model
 
-The simulation includes fuel consumption and aerodynamic drag. Fuel depletes based on specific impulse (mass flow rate = thrust / (Isp * g0)), reducing total mass over the descent. The engine cuts out if fuel reaches zero. Aerodynamic drag follows the standard drag equation (F = 0.5 * rho * Cd * A * v^2), opposing the velocity vector. Both effects reset at the start of each episode.
+The simulation includes fuel consumption and aerodynamic drag. Fuel depletes based on specific impulse (mass flow rate = thrust / (Isp * g0)), reducing total mass over the descent. The engine cuts out if fuel reaches zero. Aerodynamic drag follows the standard drag equation (F = 0.5 * rho * Cd * A * v^2), opposing the velocity vector. Both effects reset at the start of each episode. The inertia tensor is manually set to a symmetric value to eliminate cross-axis coupling from the asymmetric rocket model geometry.
 
 ### Reward Function (terminal only)
  
@@ -90,9 +97,9 @@ No distance-based shaping during flight. This is intentional and critical for st
 
 PPO is a policy gradient algorithm using two neural networks. The **Actor** takes the current state and outputs a Gaussian distribution over the 3 continuous actions. Actions are sampled during training for exploration, and the distribution mean is used during evaluation. The **Critic** takes the same state and outputs a value estimate, predicting total expected future reward from that state.
 
-Each iteration collects 512 steps of experience, then computes advantages using Generalized Advantage Estimation (GAE, lambda=0.95), answering: "was this action better or worse than expected?" The policy is then updated using the clipped surrogate objective, where the probability ratio between new and old policy is clamped to [0.95, 1.05] to prevent destructively large updates.
+Each iteration collects 2048 steps of experience, then computes advantages using Generalized Advantage Estimation (GAE, lambda=0.95), answering: "was this action better or worse than expected?" The policy is then updated using the clipped surrogate objective, where the probability ratio between new and old policy is clamped to [0.95, 1.05] to prevent destructively large updates.
 
-Additional stability mechanisms include an entropy bonus (prevents the policy from collapsing to deterministic actions), gradient clipping (caps update magnitude from outlier batches), learning rate linear decay, and action clamping to [-1, 1].
+Additional stability mechanisms include an entropy bonus (prevents the policy from collapsing to deterministic actions), gradient clipping (caps update magnitude from outlier batches), learning rate linear decay, action clamping to [-1, 1], and a log_std floor (clamped at -2.5 to maintain minimum exploration).
 
 ### Network Architecture
 
@@ -111,40 +118,58 @@ Additional stability mechanisms include an entropy bonus (prevents the policy fr
 
 ### Unity Setup
 
-1. Open the Unity project (If "project invalid" pops up, rename project file to only contain lowercase letters)
+1. Open the Unity project folder in Unity Hub (Unity will regenerate the Library folder automatically)
 2. Attach `RocketController.cs` and `PythonBridge.cs` to the rocket GameObject
 3. The rocket needs a `Rigidbody` component
 4. Create an empty GameObject as the landing pad and assign it to PythonBridge's `landingPad` field
-5. Set Inspector values (see below)
+5. Set Inspector values to match `python/config.py` (see below)
 
-### Key Inspector Values
+### Configuration
 
-**RocketController:**
+All physics and environment constants are defined in `python/config.py`. This is the single source of truth for the Python side. Unity Inspector values must be set to match.
+
+**config.py values:**
+
+| Constant | Value | Notes |
+|----------|-------|-------|
+| DRY_MASS | 22000 | kg |
+| FUEL_MASS | 2000 | kg, resets each episode |
+| TWR | 2.0 | Thrust-to-weight ratio |
+| MAX_THRUST | 470880 | Computed: MASS * 9.81 * TWR |
+| SPAWN_HEIGHT | 200 | metres |
+| PAD_HEIGHT | 5.2 | Rocket resting y-position |
+| POS_SCALE | 50 | Observation scaling |
+| VEL_SCALE | 20 | Observation scaling |
+| ANG_VEL_SCALE | 10 | Observation scaling |
+
+**RocketController Inspector:**
 
 | Field | Value | Notes |
 |-------|-------|-------|
-| maxThrust | 367000 | TWR ~1.56 at launch mass |
-| rcsForce | 400000 | Scaled for 24t rocket |
-| dryMass | 22000 | Falcon 9 dry landing mass (kg) |
-| fuelMass | 2000 | Starting fuel (kg), resets each episode |
-| useAirDrag | true | Toggle aerodynamic drag simulation |
-| spawnHeight | 30 | Start with 30, increase later |
-| spawnAngleRange | 5 | Degrees of random initial tilt |
+| maxThrust | 470880 | Must match config.py |
+| rcsForce | 2000000 | Scaled for rocket's inertia |
+| dryMass | 22000 | Must match config.py |
+| fuelMass | 2000 | Must match config.py |
+| useAirDrag | true | Toggle aerodynamic drag |
+| spawnHeight | 200 | Must match config.py |
+| spawnAngleRange | 5 | Start low, increase via curriculum |
 
-**PythonBridge:**
+**PythonBridge Inspector:**
 
 | Field | Value | Notes |
 |-------|-------|-------|
-| padHeight | 3.0 | Adjust to rocket's resting y-position |
+| padHeight | 5.2 | Adjust to rocket's resting y-position |
 | landingSpeedLimit | 3 | m/s, crash if exceeded at pad |
 | landingTiltLimit | 10 | Degrees, crash if exceeded at pad |
-| landingRadius | 5 | Metres, must land within this distance of pad centre |
+| landingRadius | 15 | Metres, must land within this distance of pad centre |
 | tiltCrashLimit | 45 | Mid-flight crash threshold |
+| outOfBoundsHeight | 400 | Must be higher than spawnHeight |
 | timeScale | 1 | Use 1 for PID/Evaluate, 10 for PPO |
 | useGimbal | true | Must be true for RCS to work |
 | maxEpisodeTime | 30 | Seconds (sim time) |
-| posScale | 50 | Must match Python scripts |
-| velScale | 20 | Must match Python scripts |
+| posScale | 50 | Must match config.py |
+| velScale | 20 | Must match config.py |
+| angVelScale | 10 | Must match config.py |
 
 ## Running the Pipeline
 
@@ -153,18 +178,12 @@ Additional stability mechanisms include an entropy bonus (prevents the policy fr
 ### Step 1: Collect PID Demonstrations
 
 ```bash
+cd python
 python PID_collect.py
 # Then press Play in Unity (timeScale = 1)
 ```
 
-Runs a suicide burn PID controller that lands the rocket and records every observation-action pair. Saves to `demos.npz`. Check the terminal for landing rate (should be >90%).
-
-**Key parameters to match between PID_collect.py and Unity Inspector:**
-- `MASS` must match dryMass + fuelMass
-- `MAX_THRUST` must match maxThrust
-- `PAD_HEIGHT` must match padHeight
-- `POS_SCALE`, `VEL_SCALE`, `ANG_VEL_SCALE` must match posScale, velScale, angVelScale
-- `SPAWN_HEIGHT` should match spawnHeight
+Runs a suicide burn PID controller that lands the rocket and records every observation-action pair from successful landings only. Saves to `demos.npz`. Check the terminal for landing rate (should be >90%).
 
 ### Step 2: Train with Behavioral Cloning
 
@@ -174,7 +193,6 @@ python Behaviorcloning.py
 ```
 
 Trains the actor network on PID demos using MSE loss. Saves weights to `NN/actor.pth`. Check that the validation loss converges (should reach around 0.001 or lower).
-
 
 ### Step 3: Evaluate the BC Policy
 
@@ -192,14 +210,17 @@ python Unity_PPO.py
 # Then press Play in Unity (timeScale = 10)
 ```
 
-Loads the BC weights (`RESUME = True`) and fine-tunes with PPO. Set Unity's timeScale to 10 for faster training. Monitor the average reward (should stay above 100 if BC was good).
+Loads the BC weights (`RESUME = True`) and fine-tunes with PPO. Set Unity's timeScale to 10 for faster training. Monitor the average reward and landing rate. Training log is saved to `results/training_log.json` every 50 iterations.
 
 **PPO hyperparameters (tuned for fine-tuning, not from-scratch training):**
-- Learning rate: 0.0001 (low, to preserve BC policy)
+- Actor learning rate: 0.00003
+- Critic learning rate: 0.0001
 - Clip range: [0.95, 1.05] (tight, prevents large policy changes)
-- Steps per iteration: 512
+- Steps per iteration: 2048
 - Epochs per iteration: 2
 - Batch size: 64
+- Entropy bonus: 0.01
+- log_std reset to -2.0 on load, clamped at -2.5 minimum
 
 ### Step 5: Evaluate the PPO Policy
 
@@ -212,42 +233,44 @@ Same as Step 3. Compare landing rate and quality before and after PPO.
 
 ## Curriculum Learning
 
-To train for harder conditions, progressively increase difficulty:
+To train for harder conditions, progressively increase difficulty in the Unity Inspector and re-run PPO with `RESUME = True`:
 
 ```
 Level 1: spawnAngleRange=5                       -> PID + BC + PPO
 Level 2: spawnAngleRange=10                      -> PPO only (RESUME from Level 1)
-Level 3: spawnAngleRange=15, spawnPosRange=5     -> PPO only (if it fails, redo PID+BC)
-Level 4: + spawnVelocityRange=3                  -> PPO only
-Level 5: Tighten landingTiltLimit=5              -> PPO only
+Level 3: spawnAngleRange=20                      -> PPO only
+Level 4: spawnAngleRange=35                      -> PPO only
+Level 5: + spawnPosRange=3                       -> PPO only
+Level 6: + spawnPosRange=5                       -> PPO only
+Level 7: + spawnVelocityRange=2                  -> PPO only
 ```
 
 Back up `NN/actor.pth` and `NN/critic.pth` before each level.
 
 When using "PPO only", change the Inspector values in Unity and run Unity_PPO.py with `RESUME = True`. The network adapts its existing policy to harder conditions.
 
-When a new skill is needed (e.g. lateral correction for position offsets), collect new PID demos at that difficulty and re-run the full pipeline from Step 1.
-
-
-
 ## Troubleshooting
 
 | Problem | Cause | Fix |
 |---------|-------|-----|
 | Unity freezes on Play | Python script not running | Start Python first, then Play |
-| Rocket spirals in PPO | log_std too high | Ensure BC sets log_std = -2.0 before saving |
+| Rocket spirals on Y-axis | Asymmetric inertia tensor | Set rb.inertiaTensor and inertiaTensorRotation in Awake |
+| Rocket spirals in PPO | log_std too high | Ensure BC sets log_std = -3.0 before saving |
 | Rocket slams into ground | Shaping reward at high timeScale | Use terminal-only reward (no distance shaping) |
 | Rocket hovers forever | Per-step reward too positive | Use -0.01 time penalty only |
 | "Address already in use" | Port 5005 still bound | Wait 30s or kill old Python process |
-| Rocket lands but engine stays on | No engine cutoff on done | PythonBridge sets cachedThrust=0 on done |
-| PID crashes from 100m | TWR 1.7 margins too tight | Increase PID margin to 10, or start from 30m |
-| BC loss won't decrease | PID data has crashes mixed in | Increase PID episodes, check landing rate |
+| Rocket lands but counts as crash | padHeight too low | Increase padHeight to match rocket resting position |
+| PID lands but too far from pad | Landing radius too small | Increase landingRadius in Inspector |
+| PPO reward oscillates wildly | Learning rate too high or clip too wide | Use actor_lr=0.00003, clip [0.95, 1.05] |
+| PPO stuck at -100 | BC policy not landing | Run EvaluateUnity.py first to verify BC works |
 | Rocket stops thrusting mid-descent | Out of fuel | Increase fuelMass or reduce spawnHeight |
+| outOfBoundsHeight crash at spawn | outOfBoundsHeight = spawnHeight | Set outOfBoundsHeight > spawnHeight (e.g. 400) |
 
 ## File Reference
 
 | File | Purpose | When to run | Needs Unity? |
 |------|---------|-------------|--------------|
+| config.py | Single source of truth for constants | Imported by all scripts | No |
 | PID_collect.py | Collect expert demonstrations | First | Yes (timeScale=1) |
 | Behaviorcloning.py | Train NN on demonstrations | After PID | No |
 | EvaluateUnity.py | Test trained policy | After BC or PPO | Yes (timeScale=1) |
