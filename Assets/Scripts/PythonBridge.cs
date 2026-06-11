@@ -16,7 +16,7 @@ public class PythonBridge : MonoBehaviour
     [Header("Environment")]
     public Transform landingPad;
     public float maxEpisodeTime = 30f;
-    public float timeScale = 10f;
+    public float timeScale = 5f;
     public bool useGimbal = true;
 
     [Header("Done Conditions")]

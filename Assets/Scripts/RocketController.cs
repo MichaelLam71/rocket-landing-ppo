@@ -22,9 +22,11 @@ public class RocketController : MonoBehaviour
 
     [Header("Spawn")]
     public float spawnHeight = 200f;
-    public float spawnPosRange = 7f;
+    public float spawnPosRange = 0f;
     public float spawnAngleRange = 35f;
     public float spawnVelocityRange = 0f;
+    public float spawnAngVelRange = 0f;
+    
 
     [Header("Physics")]
     public Vector3 centerOfMass = new Vector3(0f, 0.3f, 0f);
@@ -141,10 +143,14 @@ public class RocketController : MonoBehaviour
                 Random.Range(-spawnVelocityRange, spawnVelocityRange),
                 Random.Range(-spawnVelocityRange * 2f, 0f),
                 Random.Range(-spawnVelocityRange, spawnVelocityRange));
-            rb.angularVelocity = spawnVelocityRange * new Vector3(
-                Random.Range(-0.5f, 0.5f),
-                Random.Range(-0.5f, 0.5f),
-                Random.Range(-0.5f, 0.5f));
+        }
+
+        if (spawnAngVelRange > 0f)
+        {
+            rb.angularVelocity = new Vector3(
+                Random.Range(-spawnAngVelRange, spawnAngVelRange),
+                Random.Range(-spawnAngVelRange, spawnAngVelRange),
+                Random.Range(-spawnAngVelRange, spawnAngVelRange));
         }
 
         // reset fuel
