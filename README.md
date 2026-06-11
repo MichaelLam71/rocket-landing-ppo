@@ -118,11 +118,18 @@ Additional stability mechanisms include an entropy bonus (prevents the policy fr
 
 ### Unity Setup
 
-1. Open the Unity project folder in Unity Hub (Unity will regenerate the Library folder automatically)
-2. Attach `RocketController.cs` and `PythonBridge.cs` to the rocket GameObject
-3. The rocket needs a `Rigidbody` component
-4. Create an empty GameObject as the landing pad and assign it to PythonBridge's `landingPad` field
-5. Set Inspector values to match `python/config.py` (see below)
+1. Create a new Unity project.
+2. Replace the generated folders with the versions from this repository:
+   - `Assets/`
+   - `Packages/`
+   - `ProjectSettings/`
+3. Open the project in Unity Hub.
+4. Allow Unity to regenerate the `Library` folder automatically.
+5. Open the main scene.
+6. Verify that:
+   - `RocketController` and `PythonBridge` are attached to the Rocket GameObject.
+   - The Rocket GameObject has a `Rigidbody` component.
+   - The Landing Pad GameObject is assigned to the `landingPad` field in `PythonBridge`.
 
 ### Configuration
 
